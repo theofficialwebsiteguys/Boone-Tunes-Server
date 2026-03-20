@@ -1,0 +1,19 @@
+GET http://localhost:3001/api/integrations/spotify/test
+GET http://localhost:3001/api/integrations/spotify/test?q=Radiohead
+
+GET http://localhost:3001/api/integrations/youtube/test
+GET http://localhost:3001/api/integrations/youtube/test?q=live+at+red+rocks
+
+# Register
+curl -X POST http://localhost:3001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# Login
+curl -X POST http://localhost:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# Use the returned accessToken on a protected route
+curl http://localhost:3001/api/integrations/spotify/test \
+  -H "Authorization: Bearer <accessToken>"

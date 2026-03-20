@@ -1,0 +1,8 @@
+# Run all pending migrations
+npm run db:migrate
+
+# Roll back the last migration
+npm run db:migrate:undo
+
+# Generate a new migration (e.g. adding a Playlists table)
+npx sequelize-cli migration:generate --name create-playlists
