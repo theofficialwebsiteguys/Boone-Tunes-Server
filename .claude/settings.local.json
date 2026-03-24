@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"d:/Backup_Jared_folder/Jared/TheWebsiteGuys/Repos/boone-tunes-server\" remote -v)"
+    ]
+  }
+}

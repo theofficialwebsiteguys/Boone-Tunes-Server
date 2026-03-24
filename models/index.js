@@ -1,8 +1,10 @@
 const sequelize = require('../config/database');
 
-// Import models here as you add them
 const User = require('./User');
+const Playlist = require('./Playlist');
 
-// Register associations here (e.g. User.hasMany(Playlist))
+// Associations
+User.hasMany(Playlist, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Playlist.belongsTo(User, { foreignKey: 'userId' });
 
-module.exports = { sequelize, User };
+module.exports = { sequelize, User, Playlist };
