@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { syncAndGetPlaylists } = require('../controllers/playlists.controller');
+const { syncAndGetPlaylists, getTracksForPlaylist } = require('../controllers/playlists.controller');
 const { requireSpotifyToken } = require('../middleware/spotifyToken');
 
-// GET /api/playlists
-// Syncs playlists from Spotify and returns the stored metadata.
 // requireAuth is applied at the router level in routes/index.js
-// requireSpotifyToken ensures a valid Spotify token is available
+// requireSpotifyToken ensures a valid, refreshed Spotify token is on req.spotifyToken
+
+// GET /api/playlists
 router.get('/', requireSpotifyToken, syncAndGetPlaylists);
+
+// GET /api/playlists/:spotifyPlaylistId/tracks
+router.get('/:spotifyPlaylistId/tracks', requireSpotifyToken, getTracksForPlaylist);
 
 module.exports = router;

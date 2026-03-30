@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, refresh, me } = require('../controllers/auth.controller');
+const { register, login, refresh, me, logout } = require('../controllers/auth.controller');
 const { initiateSpotifyLogin, spotifyCallback } = require('../controllers/spotify-auth.controller');
 const { initiateGoogleLogin, googleCallback } = require('../controllers/google-auth.controller');
 const { requireAuth } = require('../middleware/auth');
@@ -22,6 +22,7 @@ router.get('/google',          initiateGoogleLogin);
 router.get('/google/callback', googleCallback);
 
 // ── Protected ─────────────────────────────────────────────────────────────────
-router.get('/me', requireAuth, me);
+router.get('/me',     requireAuth, me);
+router.post('/logout', requireAuth, logout);
 
 module.exports = router;

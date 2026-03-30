@@ -22,6 +22,7 @@ const SCOPES = [
   'user-read-private',
   'playlist-read-private',
   'playlist-read-collaborative',
+  'user-library-read',
 ].join(' ');
 
 /**
@@ -133,10 +134,151 @@ const getUserPlaylists = async (accessToken) => {
   return playlists;
 };
 
+/**
+ * Fetches all tracks for a given playlist.
+ * Handles pagination (Spotify returns max 100 per page).
+ *
+ * Compliance: track data is NOT stored in the DB.
+ *   - albumArtUrl is a reference to Spotify's CDN — the image is never copied.
+ *   - Callers are expected to cache this data short-term (in-memory only).
+ *   - Only the fields needed for YouTube search + display are returned.
+ *
+ * @param {string} accessToken
+ * @param {string} playlistId
+ * @returns {Array} Normalised track objects
+ */
+const getPlaylistTracks = async (accessToken, playlistId) => {
+  const tracks = [];
+  let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`;
+  const params = {
+    limit: 100,
+    fields: 'next,items(track(id,name,duration_ms,uri,artists(name),album(name,images)))',
+  };
+
+  while (url) {
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      params,
+    });
+
+    const items = response.data.items ?? [];
+
+    for (const item of items) {
+      const track = item?.track;
+      // Skip null tracks (e.g. local files, deleted tracks)
+      if (!track?.id) continue;
+
+      tracks.push({
+        spotifyId:   track.id,
+        name:        track.name,
+        artists:     track.artists.map((a) => a.name),
+        albumName:   track.album?.name ?? null,
+        // URL points directly to Spotify's CDN — never downloaded or stored
+        albumArtUrl: track.album?.images?.[0]?.url ?? null,
+        durationMs:  track.duration_ms,
+        spotifyUri:  track.uri,
+      });
+    }
+
+    url = response.data.next || null;
+    // After the first request, pagination params are embedded in next URL
+    delete params.limit;
+    delete params.fields;
+  }
+
+  return tracks;
+};
+
+/**
+ * Fetches all of the user's liked/saved tracks.
+ * Handles pagination (max 50 per page).
+ *
+ * Returns tracks in the same normalised shape as getPlaylistTracks.
+ * Compliance: not stored in DB, callers should cache short-term in memory only.
+ *
+ * Requires scope: user-library-read
+ * @param {string} accessToken
+ */
+const getLikedTracks = async (accessToken) => {
+  const tracks = [];
+  let url = `${SPOTIFY_API_BASE}/me/tracks`;
+  const params = { limit: 50 };
+
+  while (url) {
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      params,
+    });
+
+    const items = response.data.items ?? [];
+
+    for (const item of items) {
+      const track = item?.track;
+      if (!track?.id) continue;
+
+      tracks.push({
+        spotifyId:   track.id,
+        name:        track.name,
+        artists:     track.artists.map((a) => a.name),
+        albumName:   track.album?.name ?? null,
+        albumArtUrl: track.album?.images?.[0]?.url ?? null,
+        durationMs:  track.duration_ms,
+        spotifyUri:  track.uri,
+      });
+    }
+
+    url = response.data.next || null;
+    delete params.limit;
+  }
+
+  return tracks;
+};
+
+/**
+ * Searches Spotify for tracks matching a query string.
+ * Supports natural language queries like "Bohemian Rhapsody Queen" or just an artist name.
+ *
+ * Returns tracks in the same normalised shape as getPlaylistTracks so the
+ * frontend can use a single TrackList component for both playlists and search.
+ *
+ * Compliance: results are not stored. Callers should cache short-term in memory only.
+ *
+ * @param {string} accessToken
+ * @param {string} query
+ * @param {number} limit - max 50
+ */
+const searchTracks = async (accessToken, query, limit = 20) => {
+  const response = await axios.get(`${SPOTIFY_API_BASE}/search`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    params: {
+      q: query,
+      type: 'track',
+      limit: Math.min(limit, 50),
+    },
+  });
+
+  const items = response.data.tracks?.items ?? [];
+
+  return items
+    .filter((track) => track?.id)
+    .map((track) => ({
+      spotifyId:   track.id,
+      name:        track.name,
+      artists:     track.artists.map((a) => a.name),
+      albumName:   track.album?.name ?? null,
+      albumArtUrl: track.album?.images?.[0]?.url ?? null,
+      durationMs:  track.duration_ms,
+      spotifyUri:  track.uri,
+    }));
+};
+
 module.exports = {
   getAuthorizationUrl,
   exchangeCodeForTokens,
   refreshAccessToken,
   getSpotifyProfile,
   getUserPlaylists,
+  getPlaylistTracks,
+  getLikedTracks,
+  searchTracks,
 };

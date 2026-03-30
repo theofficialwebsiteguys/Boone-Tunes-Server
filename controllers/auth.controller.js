@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
+const cache = require('../utils/cache');
 
 const SALT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '15m';
@@ -141,4 +142,14 @@ const me = async (req, res) => {
   }
 };
 
-module.exports = { register, login, refresh, me };
+/**
+ * POST /api/auth/logout
+ * Clears all server-side cached track data for the user.
+ * JWT tokens are stateless — invalidation is handled client-side by deleting stored tokens.
+ */
+const logout = (req, res) => {
+  cache.deleteByPrefix(`tracks:${req.user.id}:`);
+  res.json({ message: 'Logged out.' });
+};
+
+module.exports = { register, login, refresh, me, logout };
