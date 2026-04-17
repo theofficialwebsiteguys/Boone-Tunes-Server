@@ -36,6 +36,8 @@ const getAuthorizationUrl = (state) => {
     redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
     scope: SCOPES,
     state,
+    // Always show the Spotify login dialog so users can switch accounts
+    show_dialog: 'true',
   });
   return `${SPOTIFY_ACCOUNTS_URL}/authorize?${params}`;
 };

@@ -128,7 +128,7 @@ const refresh = async (req, res) => {
 const me = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
-      attributes: ['id', 'email', 'createdAt'],
+      attributes: ['id', 'email', 'displayName', 'createdAt'],
     });
 
     if (!user) {

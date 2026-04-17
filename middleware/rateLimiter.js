@@ -16,4 +16,12 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests. Please slow down.' },
 });
 
-module.exports = { authLimiter, apiLimiter };
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many submissions from this IP. Please try again in 15 minutes.' },
+});
+
+module.exports = { authLimiter, apiLimiter, contactLimiter };

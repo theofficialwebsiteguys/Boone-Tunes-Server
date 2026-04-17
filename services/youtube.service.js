@@ -14,11 +14,16 @@ const axios = require('axios');
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
+// In-memory cache — key: "query|maxResults", value: { items, expiresAt }
+// TTL: 24 hours. Survives the process lifetime; resets on server restart.
+const cache = new Map();
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 /**
  * Search YouTube videos by query string using the Data API v3.
- * Returns an array of video items — data is NOT stored.
+ * Results are cached for 24 hours to conserve quota (100 units per search).
  *
- * @param {string} query - Search term (e.g. "Boone Tunes live")
+ * @param {string} query - Search term
  * @param {number} maxResults - Max results (default 5)
  */
 const searchVideos = async (query = 'test', maxResults = 5) => {
@@ -27,6 +32,16 @@ const searchVideos = async (query = 'test', maxResults = 5) => {
   if (!apiKey) {
     throw new Error('YOUTUBE_API_KEY must be set in .env');
   }
+
+  const cacheKey = `${query}|${maxResults}`;
+  const cached = cache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log(`[YouTube] Cache hit for: "${query}"`);
+    return cached.items;
+  }
+
+  console.log(`[YouTube] API call for: "${query}" (${cache.size} entries cached)`);
 
   const response = await axios.get(`${YOUTUBE_API_BASE}/search`, {
     params: {
@@ -38,17 +53,10 @@ const searchVideos = async (query = 'test', maxResults = 5) => {
     },
   });
 
-  return response.data.items;
+  const items = response.data.items;
+  cache.set(cacheKey, { items, expiresAt: Date.now() + CACHE_TTL_MS });
+
+  return items;
 };
-
-// ---------------------------------------------------------------------------
-// OAuth 2.0 scaffold — NOT yet implemented
-// When user-level OAuth is needed, wire these up with the full redirect flow.
-// Required env vars: YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET
-// ---------------------------------------------------------------------------
-
-// const getOAuthClient = () => { /* TODO */ };
-// const getUserPlaylists = async (oauthToken) => { /* TODO */ };
-// const uploadVideo = async (oauthToken, videoData) => { /* TODO */ };
 
 module.exports = { searchVideos };

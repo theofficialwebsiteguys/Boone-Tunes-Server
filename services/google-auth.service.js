@@ -28,6 +28,8 @@ const getAuthorizationUrl = (state) => {
     state,
     // 'online' — we only need identity, no offline access
     access_type: 'online',
+    // Always show the account chooser so users can switch accounts
+    prompt: 'select_account',
   });
   return `${GOOGLE_AUTH_URL}?${params}`;
 };
