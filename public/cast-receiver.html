@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>BooneTunes</title>
+  <!--
+    Cast Application Framework v3 Receiver SDK.
+    Must load before any cast.framework calls.
+  -->
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0a;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    #player {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Track info overlay — fades in on LOAD, auto-hides after 4s */
+    #overlay {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 32px 48px 40px;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #overlay.visible { opacity: 1; }
+
+    #logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 12px;
+    }
+
+    #track-name {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.2;
+      margin-bottom: 6px;
+      max-width: 70%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #artist-name {
+      font-size: 17px;
+      color: rgba(255, 255, 255, 0.6);
+      font-weight: 500;
+    }
+
+    /* Idle / error screen shown before first video loads */
+    #idle {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #0a0a0a;
+      z-index: 5;
+    }
+    #idle.hidden { display: none; }
+
+    #idle-logo {
+      font-size: 36px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #5b7cfa, #8b5cf6, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -1px;
+    }
+
+    #idle-sub {
+      font-size: 15px;
+      color: rgba(255, 255, 255, 0.35);
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Shown until first video is cast -->
+  <div id="idle">
+    <div id="idle-logo">BooneTunes</div>
+    <div id="idle-sub">Waiting for cast…</div>
+  </div>
+
+  <!-- YouTube iframe mounts here -->
+  <div id="player"></div>
+
+  <!-- Track info overlay -->
+  <div id="overlay">
+    <div id="logo">BooneTunes</div>
+    <div id="track-name"></div>
+    <div id="artist-name"></div>
+  </div>
+
+  <script>
+    // ── Constants ─────────────────────────────────────────────────────────────
+    const NAMESPACE = 'urn:x-cast:com.boonetunes.player';
+
+    // ── Cast receiver context ─────────────────────────────────────────────────
+    const context = cast.framework.CastReceiverContext.getInstance();
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    let ytPlayer       = null;
+    let playerReady    = false;
+    let pendingVideoId = null;
+    let overlayTimer   = null;
+
+    // ── Overlay helpers ───────────────────────────────────────────────────────
+    function showOverlay(trackName, artistName) {
+      const overlay    = document.getElementById('overlay');
+      const trackEl    = document.getElementById('track-name');
+      const artistEl   = document.getElementById('artist-name');
+
+      trackEl.textContent  = trackName  || '';
+      artistEl.textContent = artistName || '';
+
+      overlay.classList.add('visible');
+      clearTimeout(overlayTimer);
+      overlayTimer = setTimeout(() => overlay.classList.remove('visible'), 5000);
+    }
+
+    function hideIdle() {
+      document.getElementById('idle').classList.add('hidden');
+    }
+
+    // ── YouTube IFrame API ────────────────────────────────────────────────────
+    const ytScript = document.createElement('script');
+    ytScript.src   = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(ytScript);
+
+    window.onYouTubeIframeAPIReady = function () {
+      ytPlayer = new YT.Player('player', {
+        width:  '100%',
+        height: '100%',
+        videoId: '',
+        playerVars: {
+          autoplay:       1,
+          controls:       0,
+          rel:            0,
+          modestbranding: 1,
+          iv_load_policy: 3,
+          disablekb:      1,
+          fs:             0,
+          playsinline:    1,
+        },
+        events: {
+          onReady: function () {
+            playerReady = true;
+
+            // Load video that arrived before the player was ready
+            if (pendingVideoId) {
+              ytPlayer.loadVideoById(pendingVideoId);
+              pendingVideoId = null;
+            }
+          },
+
+          onStateChange: function (e) {
+            // Video finished — notify sender so it can advance the queue
+            if (e.data === YT.PlayerState.ENDED) {
+              context.sendCustomMessage(NAMESPACE, undefined, { type: 'ENDED' });
+            }
+          },
+
+          onError: function (e) {
+            // Notify sender on unplayable video so it can try an alternative
+            context.sendCustomMessage(NAMESPACE, undefined, { type: 'ERROR', code: e.data });
+          },
+        },
+      });
+    };
+
+    // ── Custom message listener (sender → receiver) ───────────────────────────
+    context.addCustomMessageListener(NAMESPACE, function (event) {
+      const msg = event.data;
+
+      switch (msg.type) {
+
+        case 'LOAD':
+          hideIdle();
+          if (playerReady) {
+            ytPlayer.loadVideoById(msg.videoId);
+          } else {
+            pendingVideoId = msg.videoId;
+          }
+          showOverlay(msg.trackName, msg.artistName);
+          break;
+
+        case 'PLAY':
+          if (playerReady) ytPlayer.playVideo();
+          break;
+
+        case 'PAUSE':
+          if (playerReady) ytPlayer.pauseVideo();
+          break;
+
+        case 'SEEK':
+          if (playerReady) ytPlayer.seekTo(msg.seconds, true);
+          break;
+      }
+    });
+
+    // ── Start the receiver (disableIdleTimeout keeps it alive between tracks) ─
+    context.start({ disableIdleTimeout: true });
+  </script>
+</body>
+</html>

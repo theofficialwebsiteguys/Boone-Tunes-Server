@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const path    = require('path');
 const express = require('express');
 const cors = require('cors');
 const { sequelize } = require('./models');
@@ -9,6 +10,9 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve the Cast receiver page and any future static assets
+app.use('/cast', express.static(path.join(__dirname, 'public')));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
