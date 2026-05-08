@@ -1,56 +1,74 @@
 /**
  * YouTube Service — API Key (Data API v3)
  *
- * Current implementation uses a server-side API key for public data only.
+ * Cache strategy (quota-safe):
+ *   On startup: loads data/youtube-cache.json into memory — these entries
+ *   never expire and count as zero API units. Commit the seed file to git so
+ *   Heroku always boots pre-warmed.
  *
- * OAuth 2.0 structure is prepared below for future use cases:
- * - Uploading videos on behalf of a user
- * - Reading a user's private playlists
- * OAuth requires YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET and a redirect flow
- * (do NOT implement until user-facing auth is ready).
+ *   Runtime: new searches hit the API once then live in the in-memory Map for
+ *   the process lifetime (24 h TTL). On Heroku the Map resets on dyno restart;
+ *   the seed file picks up the slack.
+ *
+ *   Run `node scripts/seed-youtube-cache.js` to regenerate the seed file.
  */
 
 const axios = require('axios');
+const fs    = require('fs');
+const path  = require('path');
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+const CACHE_TTL_MS     = 24 * 60 * 60 * 1000; // 24 hours
+const SEED_FILE        = path.join(__dirname, '../data/youtube-cache.json');
 
-// In-memory cache — key: "query|maxResults", value: { items, expiresAt }
-// TTL: 24 hours. Survives the process lifetime; resets on server restart.
+// In-memory working cache — key: "query|maxResults"
 const cache = new Map();
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// ── Load seed file on startup ──────────────────────────────────────────────
+
+(function loadSeedFile() {
+  if (!fs.existsSync(SEED_FILE)) return;
+  try {
+    const raw  = fs.readFileSync(SEED_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    let count  = 0;
+    for (const [key, entry] of Object.entries(data)) {
+      // Seed entries get a far-future expiry so they never evict during testing
+      cache.set(key, { items: entry.items, expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000 });
+      count++;
+    }
+    console.log(`[YouTube] Loaded ${count} seeded entries from cache file`);
+  } catch (err) {
+    console.warn('[YouTube] Could not load seed file:', err.message);
+  }
+})();
+
+// ── Core search ───────────────────────────────────────────────────────────
 
 /**
  * Search YouTube videos by query string using the Data API v3.
- * Results are cached for 24 hours to conserve quota (100 units per search).
+ * Seed-file hits cost 0 units. Runtime hits cost 100 units and are cached
+ * for 24 hours for the lifetime of the process.
  *
- * @param {string} query - Search term
+ * @param {string} query      - Search term
  * @param {number} maxResults - Max results (default 5)
  */
 const searchVideos = async (query = 'test', maxResults = 5) => {
   const apiKey = process.env.YOUTUBE_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('YOUTUBE_API_KEY must be set in .env');
-  }
+  if (!apiKey) throw new Error('YOUTUBE_API_KEY must be set in .env');
 
   const cacheKey = `${query}|${maxResults}`;
-  const cached = cache.get(cacheKey);
+  const cached   = cache.get(cacheKey);
 
   if (cached && cached.expiresAt > Date.now()) {
-    console.log(`[YouTube] Cache hit for: "${query}"`);
+    console.log(`[YouTube] Cache hit: "${query}"`);
     return cached.items;
   }
 
-  console.log(`[YouTube] API call for: "${query}" (${cache.size} entries cached)`);
+  console.log(`[YouTube] API call (${cache.size} cached): "${query}"`);
 
   const response = await axios.get(`${YOUTUBE_API_BASE}/search`, {
-    params: {
-      part: 'snippet',
-      q: query,
-      type: 'video',
-      maxResults,
-      key: apiKey,
-    },
+    params: { part: 'snippet', q: query, type: 'video', maxResults, key: apiKey },
   });
 
   const items = response.data.items;
