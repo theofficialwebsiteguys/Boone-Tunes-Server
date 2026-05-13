@@ -125,10 +125,11 @@
     const context = cast.framework.CastReceiverContext.getInstance();
 
     // ── State ─────────────────────────────────────────────────────────────────
-    let ytPlayer       = null;
-    let playerReady    = false;
-    let pendingVideoId = null;
-    let overlayTimer   = null;
+    let ytPlayer         = null;
+    let playerReady      = false;
+    let pendingVideoId   = null;
+    let pendingAutoPlay  = true;
+    let overlayTimer     = null;
 
     // ── Overlay helpers ───────────────────────────────────────────────────────
     function showOverlay(trackName, artistName) {
@@ -172,10 +173,14 @@
           onReady: function () {
             playerReady = true;
 
-            // Load video that arrived before the player was ready
             if (pendingVideoId) {
-              ytPlayer.loadVideoById(pendingVideoId);
-              pendingVideoId = null;
+              if (pendingAutoPlay) {
+                ytPlayer.loadVideoById(pendingVideoId);
+              } else {
+                ytPlayer.cueVideoById(pendingVideoId);
+              }
+              pendingVideoId  = null;
+              pendingAutoPlay = true;
             }
           },
 
@@ -203,9 +208,14 @@
         case 'LOAD':
           hideIdle();
           if (playerReady) {
-            ytPlayer.loadVideoById(msg.videoId);
+            if (msg.autoPlay === false) {
+              ytPlayer.cueVideoById(msg.videoId);
+            } else {
+              ytPlayer.loadVideoById(msg.videoId);
+            }
           } else {
-            pendingVideoId = msg.videoId;
+            pendingVideoId  = msg.videoId;
+            pendingAutoPlay = msg.autoPlay !== false;
           }
           showOverlay(msg.trackName, msg.artistName);
           break;

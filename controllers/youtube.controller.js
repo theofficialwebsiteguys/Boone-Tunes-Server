@@ -26,7 +26,6 @@ const searchForTrack = async (req, res) => {
   const limit = Math.min(parseInt(maxResults, 10) || 5, 10);
 
   try {
-    // Build a query optimised for official music videos
     const query = artist
       ? `${artist} ${track} official music video`
       : `${track} official music video`;
