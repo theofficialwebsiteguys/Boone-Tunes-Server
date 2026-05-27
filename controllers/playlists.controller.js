@@ -14,6 +14,8 @@ const { getUserPlaylists, getPlaylistTracks, getLikedTracks } = require('../serv
 // Virtual playlist ID used to represent the user's liked songs
 const LIKED_SONGS_ID = 'liked-songs';
 const cache = require('../utils/cache');
+const DEMO_MODE = process.env.DEMO_MODE === 'true';
+const demoData  = DEMO_MODE ? require('../data/demo-data') : null;
 
 // Track cache TTL — 5 minutes. Data is never written to the DB.
 const TRACK_CACHE_TTL = 5 * 60 * 1000;
@@ -28,6 +30,10 @@ const trackCacheKey = (userId, playlistId) => `tracks:${userId}:${playlistId}`;
  *           requireSpotifyToken middleware (sets req.spotifyToken)
  */
 const syncAndGetPlaylists = async (req, res) => {
+  if (DEMO_MODE) {
+    return res.json({ playlists: demoData.playlists });
+  }
+
   try {
     const spotifyPlaylists = await getUserPlaylists(req.spotifyToken);
 
@@ -96,6 +102,12 @@ const syncAndGetPlaylists = async (req, res) => {
  */
 const getTracksForPlaylist = async (req, res) => {
   const { spotifyPlaylistId } = req.params;
+
+  if (DEMO_MODE) {
+    const tracks = demoData.tracks[spotifyPlaylistId] ?? [];
+    return res.json({ tracks, fromCache: false });
+  }
+
   const key = trackCacheKey(req.user.id, spotifyPlaylistId);
 
   const cached = cache.get(key);
