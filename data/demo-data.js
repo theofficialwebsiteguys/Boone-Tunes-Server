@@ -8,12 +8,27 @@
  * Cache key format (youtube.service.js): `${artist} ${track} official music video|5`
  */
 
+const fs   = require('fs');
+const path = require('path');
+
+let ytCache = {};
+try {
+  const cacheFile = path.join(__dirname, 'youtube-cache.json');
+  if (fs.existsSync(cacheFile)) ytCache = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+} catch {}
+
+function thumb(artist, track) {
+  const key   = `${artist} ${track} official music video|5`;
+  const entry = ytCache[key];
+  return entry?.items?.[0]?.snippet?.thumbnails?.high?.url ?? null;
+}
+
 const t = (id, name, artists, albumName, durationMs) => ({
   spotifyId:   `demo_${id}`,
   name,
   artists,
   albumName,
-  albumArtUrl: null,
+  albumArtUrl: thumb(artists[0], name),
   durationMs,
   spotifyUri:  `spotify:track:demo_${id}`,
 });
