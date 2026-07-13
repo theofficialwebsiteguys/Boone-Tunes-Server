@@ -9,6 +9,7 @@ const integrationRoutes = require('./integrations.routes');
 const playlistRoutes = require('./playlists.routes');
 const searchRoutes = require('./search.routes');
 const youtubeRoutes = require('./youtube.routes');
+const exploreRoutes = require('./explore.routes');
 
 // Public
 router.use('/auth',    authRoutes);
@@ -20,5 +21,6 @@ router.use('/integrations', requireAuth, integrationRoutes);
 router.use('/playlists',    requireAuth, playlistRoutes);
 router.use('/search',       requireAuth, searchRoutes);
 router.use('/youtube',      requireAuth, youtubeRoutes);
+router.use('/explore',      requireAuth, exploreRoutes);
 
 module.exports = router;

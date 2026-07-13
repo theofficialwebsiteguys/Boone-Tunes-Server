@@ -82,4 +82,57 @@ const searchTracks = async (query = 'test', limit = 5) => {
   return response.data.tracks;
 };
 
-module.exports = { getAccessToken, searchTracks };
+/**
+ * Fetches metadata for a public playlist (name, description, image, track count)
+ * using the client-credentials token.
+ *
+ * NOTE: this only works for regular user/curator-owned public playlists.
+ * Playlists owned by Spotify's own editorial account (Today's Top Hits,
+ * RapCaviar, etc.) return 404 via client-credentials — confirmed empirically,
+ * Spotify has locked those out of the Web API even though the generic
+ * `GET /playlists/{id}` endpoint itself is not deprecated. Use
+ * `searchPlaylists` to discover a real, fetchable playlist instead of
+ * hardcoding an editorial playlist ID.
+ *
+ * @param {string} playlistId - Spotify playlist ID
+ */
+const getPlaylistMeta = async (playlistId) => {
+  const token = await getAccessToken();
+
+  const response = await axios.get(`${SPOTIFY_API_BASE}/playlists/${playlistId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { fields: 'id,name,description,images,tracks.total' },
+  });
+
+  return normalizePlaylistMeta(response.data);
+};
+
+/**
+ * Searches Spotify for playlists matching a query and returns the top match's
+ * metadata. Used to surface real, currently-fetchable playlists (e.g. a
+ * "Top Hits 2026" playlist from an active curator) since Spotify's own
+ * editorial playlists are no longer reachable via client-credentials.
+ *
+ * @param {string} query
+ */
+const searchPlaylists = async (query, limit = 1) => {
+  const token = await getAccessToken();
+
+  const response = await axios.get(`${SPOTIFY_API_BASE}/search`, {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { q: query, type: 'playlist', limit },
+  });
+
+  const items = (response.data.playlists?.items ?? []).filter(Boolean);
+  return items.map(normalizePlaylistMeta);
+};
+
+const normalizePlaylistMeta = (data) => ({
+  id: data.id,
+  name: data.name,
+  description: data.description || null,
+  imageUrl: data.images?.[0]?.url ?? null,
+  trackCount: data.tracks?.total ?? 0,
+});
+
+module.exports = { getAccessToken, searchTracks, getPlaylistMeta, searchPlaylists };

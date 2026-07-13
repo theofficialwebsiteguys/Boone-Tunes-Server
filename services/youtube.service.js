@@ -77,4 +77,46 @@ const searchVideos = async (query = 'test', maxResults = 5) => {
   return items;
 };
 
-module.exports = { searchVideos };
+// ── Trending ──────────────────────────────────────────────────────────────
+
+const TRENDING_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours — trending moves slowly enough
+
+/**
+ * Fetches YouTube's real "most popular" videos in the Music category (id 10).
+ * Uses videos.list?chart=mostPopular, which returns real view counts via the
+ * `statistics` part — nothing here is fabricated.
+ *
+ * @param {number} maxResults - Max videos to return (default 12)
+ */
+const getTrendingMusicVideos = async (maxResults = 12) => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) throw new Error('YOUTUBE_API_KEY must be set in .env');
+
+  const cacheKey = `trending|${maxResults}`;
+  const cached   = cache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log('[YouTube] Trending cache hit');
+    return cached.items;
+  }
+
+  console.log('[YouTube] API call: trending music videos');
+
+  const response = await axios.get(`${YOUTUBE_API_BASE}/videos`, {
+    params: {
+      part: 'snippet,statistics',
+      chart: 'mostPopular',
+      videoCategoryId: 10, // Music
+      regionCode: 'US',
+      maxResults,
+      key: apiKey,
+    },
+  });
+
+  const items = response.data.items;
+  cache.set(cacheKey, { items, expiresAt: Date.now() + TRENDING_CACHE_TTL_MS });
+
+  return items;
+};
+
+module.exports = { searchVideos, getTrendingMusicVideos };

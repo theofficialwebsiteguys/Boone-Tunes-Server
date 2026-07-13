@@ -274,6 +274,61 @@ const searchTracks = async (accessToken, query, limit = 20) => {
     }));
 };
 
+/**
+ * Searches for an artist by name and returns the top match.
+ * Used to resolve a seed artist name (from the user's own library) to a Spotify
+ * artist ID before fetching their top tracks.
+ *
+ * Compliance: results are not stored.
+ *
+ * @param {string} accessToken
+ * @param {string} name
+ * @returns {{ id: string, name: string } | null}
+ */
+const searchArtist = async (accessToken, name) => {
+  const response = await axios.get(`${SPOTIFY_API_BASE}/search`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    params: { q: name, type: 'artist', limit: 1 },
+  });
+
+  const artist = response.data.artists?.items?.[0];
+  if (!artist?.id) return null;
+
+  return { id: artist.id, name: artist.name };
+};
+
+/**
+ * Fetches an artist's top tracks. Unlike /recommendations and /related-artists,
+ * this endpoint was NOT deprecated in the Nov 2024 Web API changes, so it remains
+ * usable without extended quota access.
+ *
+ * Returns tracks in the same normalised shape as getPlaylistTracks/searchTracks.
+ * Compliance: results are not stored, callers should cache short-term in memory only.
+ *
+ * @param {string} accessToken
+ * @param {string} artistId
+ */
+const getArtistTopTracks = async (accessToken, artistId) => {
+  const response = await axios.get(`${SPOTIFY_API_BASE}/artists/${artistId}/top-tracks`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    params: { market: 'US' },
+  });
+
+  const items = response.data.tracks ?? [];
+
+  return items
+    .filter((track) => track?.id)
+    .map((track) => ({
+      spotifyId:   track.id,
+      name:        track.name,
+      artists:     track.artists.map((a) => a.name),
+      albumName:   track.album?.name ?? null,
+      albumArtUrl: track.album?.images?.[0]?.url ?? null,
+      durationMs:  track.duration_ms,
+      spotifyUri:  track.uri,
+    }));
+};
+
 module.exports = {
   getAuthorizationUrl,
   exchangeCodeForTokens,
@@ -283,4 +338,6 @@ module.exports = {
   getPlaylistTracks,
   getLikedTracks,
   searchTracks,
+  searchArtist,
+  getArtistTopTracks,
 };
